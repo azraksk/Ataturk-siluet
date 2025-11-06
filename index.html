@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Beni Hatırlayınız — Siluet Mask</title>
+<link href="https://fonts.googleapis.com/css2?family=Dancing+Script&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Allura&family=Italianno&family=Pinyon+Script&display=swap" rel="stylesheet">
+
+<style>
+  :root { --bg: #000; }
+  html,body { height:100%; margin:0; background:var(--bg); }
+  canvas { display:block; width:100%; height:100vh; }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<script>
+/*
+  Çalışma prensibi:
+  1) siluet.png yüklendiğinde offscreen bir "maskCanvas" oluşturulur. Maskede yalnızca
+     siluetin (siyah) olduğu piksellerin alfa değeri 255, diğerlerinin alfa 0 olur.
+  2) Her frame'de offscreen "textCanvas" üzerinde akıcı şekilde "Beni hatırlayınız."
+     metni satırlara döşenir.
+  3) textCanvas üzerine mask uygulanır (globalCompositeOperation = 'destination-in'
+     ile veya doğrudan drawImage maskCanvas ile). Bu da yalnızca siluet içindeki
+     yazıyı bırakır.
+  4) Sonuç ana canvasa ölçeklenip çizilir.
+*/
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+function fitCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+fitCanvas();
+window.addEventListener('resize', fitCanvas);
+
+const text = "Beni hatırlayınız. "; // tekrar edip akar
+const speed = 2.5;                   // akış hızı (ayarla)
+const lineHeight = 13;               // satır yüksekliği (ayarla)
+const fontSize = 14;                 // font boyutu (ayarla)
+const threshold = 200;               // siluet eşik değeri (0-255). Küçük = sadece çok siyahlar.
+
+const img = new Image();
+img.src = 'siluet.png'; // siyah siluet (beyaz arka plan veya saydam) — aynı klasörde
+
+// Offscreen kanvaslar
+let maskCanvas, maskCtx, textCanvas, textCtx;
+
+img.onload = () => {
+  // maskCanvas: img boyutunda, alfa 255 olan yerler = silüet
+  maskCanvas = document.createElement('canvas');
+  maskCanvas.width = img.width;
+  maskCanvas.height = img.height;
+  maskCtx = maskCanvas.getContext('2d');
+  maskCtx.drawImage(img, 0, 0);
+
+  // Oku pikseller, alfa'yı tersleyip mask oluştur
+  const imgData = maskCtx.getImageData(0, 0, img.width, img.height);
+  const data = imgData.data;
+  // Yeni mask imagedata (beyaz renk, alfa 0/255)
+  const maskData = maskCtx.createImageData(img.width, img.height);
+  const md = maskData.data;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
+    const lum = (r + g + b) / 3;
+    // Eğer piksel koyu ise (siyah siluet) => görünür yap
+    if (lum < threshold && a > 20) {
+      md[i] = 255; md[i+1] = 255; md[i+2] = 255; md[i+3] = 255; // beyaz, alfa 255
+    } else {
+      md[i] = 0; md[i+1] = 0; md[i+2] = 0; md[i+3] = 0; // şeffaf
+    }
+  }
+  maskCtx.clearRect(0,0,maskCanvas.width,maskCanvas.height);
+  maskCtx.putImageData(maskData, 0, 0);
+
+  // textCanvas: yazıyı burada çizip mask ile birleştireceğiz
+  textCanvas = document.createElement('canvas');
+  textCanvas.width = img.width;
+  textCanvas.height = img.height;
+  textCtx = textCanvas.getContext('2d');
+
+  requestAnimationFrame(loop);
+};
+
+let offset = 0;
+
+function loop() {
+  if (!maskCanvas) {
+    requestAnimationFrame(loop);
+    return;
+  }
+
+  // temizle ana canvas
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // hesapla görünecek resim boyutu (ekrana sığdır)
+  const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
+  const drawW = img.width * scale;
+  const drawH = img.height * scale;
+  const startX = (canvas.width - drawW) / 2;
+  const startY = (canvas.height - drawH) / 2;
+
+  // --- textCanvas'a yazıyı döşe ---
+  textCtx.clearRect(0,0,textCanvas.width,textCanvas.height);
+
+  // gradyan (kırmızı->beyaz)
+  const grad = textCtx.createLinearGradient(0, 0, textCanvas.width, 0);
+  grad.addColorStop(0, '#DE3728');
+  grad.addColorStop(0.5, '#ffffff');
+  grad.addColorStop(1, '#DF2314');
+  textCtx.fillStyle = grad;
+
+ textCtx.font = "24px 'Italianno', cursive";
+
+
+
+
+
+
+
+
+
+
+  textCtx.textBaseline = 'top';
+
+  // offset artıyor (kaydırma)
+  offset -= speed;
+  // wrap offset; çok büyük olursa başa döndür
+  const textWidth = textCtx.measureText(text).width;
+  if (Math.abs(offset) > textWidth) offset += textWidth;
+
+  // döşeme: her satıra metni repet ederek doldur
+  for (let y = 0; y < textCanvas.height; y += lineHeight) {
+    let x = offset;
+    // önden biraz fazladan çizelim ki boşluk kalmasın
+    while (x < textCanvas.width + textWidth) {
+      textCtx.fillText(text, x, y);
+      x += textWidth;
+    }
+  }
+
+  // --- maskeyi uygula: yalnızca maskCanvas'taki beyaz piksellerin kaldığı alanı al ---
+  // Bunu yapmak için textCanvas üzerinde destination-in işlemi uyguluyoruz:
+  textCtx.globalCompositeOperation = 'destination-in';
+  textCtx.drawImage(maskCanvas, 0, 0);
+  textCtx.globalCompositeOperation = 'source-over';
+
+  // Sonuç ana canvasa ölçeklenmiş şekilde çiz
+  ctx.drawImage(textCanvas, 0, 0, textCanvas.width, textCanvas.height, startX, startY, drawW, drawH);
+
+  requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>
