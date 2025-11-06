@@ -42,6 +42,11 @@ fontSize	Yazı boyutu	14
 
 threshold	Maske oluştururken kullanılan eşik değeri (0–255)	200
 
+## 📹 Ekran Kaydı / Demo
+Projeyi çalıştırmadan önce animasyonun nasıl göründüğünü görmek için aşağıdaki ekran kaydına bakabilirsiniz:
+![video](https://github.com/user-attachments/assets/39ecabb8-8224-4791-8e01-1dcd61a4e46c)
+
+
 ## 📚 Çalışma Prensibi
 
 **Siluet Yükleme:** siluet.png dosyası yüklendiğinde bir maske oluşturulur.
